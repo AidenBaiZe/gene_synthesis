@@ -1,0 +1,108 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>合成日志上传与入库</title>
+  <style>
+    body { font-family: "Segoe UI", "Microsoft YaHei", sans-serif; margin: 32px auto; max-width: 1280px; color: #1f2937; }
+    h1 { font-size: 22px; margin: 0 0 8px; }
+    h2 { font-size: 16px; margin: 28px 0 12px; }
+    form { border: 1px solid #e5e7eb; padding: 20px; margin: 20px 0 24px; }
+    label { display: block; font-size: 13px; margin: 0 0 6px; color: #374151; }
+    input[type=text], input[type=number] { width: 100%; box-sizing: border-box; padding: 8px; margin-bottom: 12px; border: 1px solid #d1d5db; }
+    .row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+    .row.two { grid-template-columns: 1fr 2fr; }
+    button { background: #2563eb; color: #fff; border: 0; padding: 8px 16px; cursor: pointer; }
+    button:hover { background: #1d4ed8; }
+    .flash { padding: 10px 12px; margin-bottom: 16px; }
+    .flash.error { background: #fee2e2; }
+    .flash.message { background: #ecfdf5; }
+    .notice { color: #6b7280; font-size: 13px; }
+    table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    th, td { border-bottom: 1px solid #e5e7eb; text-align: left; padding: 8px; vertical-align: top; }
+    th { color: #6b7280; font-weight: 600; }
+    tr.not-current td { color: #9ca3af; }
+    code { font-family: Consolas, monospace; font-size: 12px; }
+    a { color: #2563eb; text-decoration: none; margin-right: 8px; }
+  </style>
+</head>
+<body>
+  <h1>合成日志上传与入库（测试）</h1>
+
+  {% for category, message in get_flashed_messages(with_categories=true) %}
+    <div class="flash {{ category }}">{{ message }}</div>
+  {% endfor %}
+
+  <form method="post" enctype="multipart/form-data">
+    <div class="row">
+      <div><label>主机</label><input type="text" name="host" value="{{ config.host }}" required></div>
+      <div><label>端口</label><input type="number" name="port" value="{{ config.port }}" required></div>
+      <div><label>数据库</label><input type="text" name="dbname" value="{{ config.dbname }}" required></div>
+    </div>
+    <div class="row two">
+      <div><label>用户</label><input type="text" name="user" value="{{ config.user }}" required></div>
+      <div><label>日志文件</label><input type="file" name="files" accept=".txt,text/plain" multiple required></div>
+    </div>
+    <button type="submit">上传并入库</button>
+  </form>
+
+  {% if results %}
+  <h2>本次上传</h2>
+  <table>
+    <thead><tr>
+      <th>文件</th><th>板号 / 通道 / 版本</th><th>状态</th><th>序列</th>
+      <th>循环 / Inject / 操作</th><th>解析问题</th><th>Drain 模板</th><th>原始文件</th>
+    </tr></thead>
+    <tbody>
+      {% for row in results %}
+      <tr>
+        <td>{{ row.file_name }}{% if row.error %}<div class="flash error">{{ row.error }}</div>{% endif %}</td>
+        <td>
+          {% if row.run_code %}{{ row.run_code }} / CH_{{ row.channel_no }}<br>{% endif %}
+          {% if row.version_id %}版本 #{{ row.version_no or '?' }}{% endif %}
+          {% if row.skipped %}<br>已存在，未重复解析{% endif %}
+        </td>
+        <td>{{ row.status or ('FAILED' if row.error else '') }}<br>{{ row.completed_at or '' }}</td>
+        <td><code>{{ row.sequence or '' }}</code></td>
+        <td>{% if not row.error %}{{ row.cycle_count }} / {{ row.event_total }} / {{ row.operation_total }}{% endif %}</td>
+        <td>{{ row.issue_count or 0 }}</td>
+        <td>{% if not row.error %}新建 {{ row.new_profiles }}，复用 {{ row.reused_profiles }}{% endif %}</td>
+        <td>{% if row.file_id %}<a href="/api/source-files/{{ row.file_id }}/content" target="_blank">查看原文</a><a href="/api/source-files/{{ row.file_id }}/download">下载</a>{% endif %}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% endif %}
+
+  <h2>历史上传</h2>
+  {% if history %}
+  <table>
+    <thead><tr>
+      <th>入库时间</th><th>文件</th><th>板号 / 通道</th><th>日志版本</th>
+      <th>状态</th><th>序列</th><th>循环 / Inject / 操作</th><th>问题</th><th>原始文件</th>
+    </tr></thead>
+    <tbody>
+      {% for row in history %}
+      <tr class="{{ '' if row.is_current else 'not-current' }}">
+        <td>{{ row.imported_at.strftime('%Y-%m-%d %H:%M:%S') if row.imported_at else '' }}</td>
+        <td>{{ row.original_file_name }}</td>
+        <td>{{ row.run_code }} / CH_{{ row.channel_no }}</td>
+        <td>#{{ row.version_no }}{% if row.is_current %} 当前{% else %} 历史{% endif %}<br><code>{{ row.fast_hash or '' }}</code></td>
+        <td>{{ row.ingest_status }} / {{ row.status }}<br>{{ row.completed_at or '' }}{% if row.error_summary %}<br>{{ row.error_summary }}{% endif %}</td>
+        <td><code>{{ row.sequence_3to5 or '' }}</code></td>
+        <td>{{ row.cycle_count }} / {{ row.event_total }} / {{ row.operation_count }}</td>
+        <td>{{ row.issue_count }}</td>
+        <td>
+          {% if row.blob_status == 'PRESENT' %}
+            <a href="/api/source-files/{{ row.file_id }}/content" target="_blank">查看原文</a>
+            <a href="/api/source-files/{{ row.file_id }}/download">下载</a>
+          {% else %}原文件缺失{% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% endif %}
+</body>
+</html>

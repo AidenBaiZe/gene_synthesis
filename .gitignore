@@ -1,0 +1,58 @@
+# Publish only the application source and reproducible database schema
+/*
+!/.gitignore
+!/README.md
+!/code/
+!/database/
+
+# Python caches and local environments
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+.venv/
+venv/
+
+# Local configuration and secrets
+.env
+.env.*
+!.env.example
+db_config.json
+*.local.json
+
+# Editors and operating-system files
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Temporary Microsoft Office lock files
+~$*
+
+# Codex review/analysis artifacts and scratch output
+/.codex_review/
+/.codex_tmp*/
+/tmp/
+/work/
+
+# Local database backups (keep schema SQL files tracked)
+/database/backups/
+*.dump
+
+# Internal/raw experiment data; remove these lines if sample data should be published
+/HPLC/
+/日志文件/
+
+# Internal project notes kept locally; source code and design diagrams remain trackable
+/*.docx
+/*.pgerd
+
+# Build and packaging output
+build/
+dist/
+*.egg-info/
